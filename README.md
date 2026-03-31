@@ -11,52 +11,177 @@ The name "Zhumu" (驻目) means "to fix one's gaze" — paying close attention t
 - **Fully offline**: All processing happens locally — no cloud services, no data leaves your machine
 - **Timestamped transcripts**: Saved as clean Markdown files for easy reading and sharing
 
-## Requirements
+---
 
-- **macOS** on Apple Silicon (M-series)
-- **Python 3.10+**
-- **BlackHole** virtual audio driver (installed via setup script)
-- **Tesseract** OCR engine (installed via setup script)
+## Getting Started (Complete Beginner Guide)
 
-## Installation
+Never used the Terminal before? No problem. Follow every step below exactly as written.
+
+### Step 1: Open Terminal
+
+Terminal is an app built into every Mac that lets you type commands.
+
+1. Press **Cmd + Space** to open Spotlight search
+2. Type **Terminal** and press **Enter**
+3. A window with a dark or light background and a blinking cursor will appear — this is Terminal
+
+You'll type (or paste) commands here. To paste, press **Cmd + V**.
+
+### Step 2: Install Homebrew
+
+Homebrew is a free tool that makes it easy to install software on your Mac. You only need to do this once.
+
+Paste this entire line into Terminal and press **Enter**:
 
 ```bash
-git clone https://github.com/your-username/zhumu.git
-cd zhumu
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+- It will ask for your **Mac password** — type it and press Enter (you won't see the characters as you type, that's normal)
+- It may say "Press RETURN to continue" — just press **Enter**
+- This takes a few minutes. Wait for it to finish
+
+> **Already have Homebrew?** If you see "Homebrew is already installed", you're good — skip to Step 3.
+
+### Step 3: Install BlackHole (Virtual Audio Driver)
+
+BlackHole is a free audio tool that lets Zhumu "listen" to the same audio you hear on calls.
+
+Paste this into Terminal and press **Enter**:
+
+```bash
+brew install blackhole-2ch
+```
+
+**Important: Restart your Mac after this step.** BlackHole needs a restart to activate. (Apple menu → Restart)
+
+### Step 4: Set Up Audio Routing (One-Time)
+
+After restarting, you need to create a special audio setup so that your call audio goes to both your ears AND Zhumu at the same time.
+
+1. Press **Cmd + Space**, type **Audio MIDI Setup**, and press **Enter**
+2. You'll see a list of audio devices on the left (like "MacBook Air Speakers", "MacBook Air Microphone", etc.)
+3. Click the **+** button at the **bottom-left** of the window
+4. Select **Create Multi-Output Device**
+5. A new item called "Multi-Output Device" appears on the left, and a table appears on the right
+6. In the table, check the **Use** checkbox next to:
+   - **BlackHole 2ch**
+   - **MacBook Air Speakers** (or whichever speakers/headphones you use)
+7. Close Audio MIDI Setup — you're done with it
+
+You only need to do this once. The Multi-Output Device will stay there permanently.
+
+### Step 5: Download and Install Zhumu
+
+Back in Terminal, paste these commands one at a time, pressing **Enter** after each:
+
+```bash
+git clone https://github.com/adonis-cyril/mandarintranslator.git
+```
+
+This downloads the Zhumu code to your computer.
+
+```bash
+cd mandarintranslator
+```
+
+This moves into the Zhumu folder.
+
+```bash
 chmod +x setup.sh
 ./setup.sh
 ```
 
-The setup script will:
-1. Install BlackHole (virtual audio driver)
-2. Install Tesseract with Chinese language packs
-3. Create a Python virtual environment and install dependencies
-4. Download the Whisper speech recognition model (~500 MB)
-5. Download the Chinese→English translation package
+This runs the setup script. It will:
+- Install Chinese language support for text recognition
+- Download the AI speech recognition model (~500 MB)
+- Download the Chinese-to-English translation package (~100 MB)
 
-## Audio Setup (One-Time)
+**This will take several minutes** depending on your internet speed. Let it finish completely.
 
-For Zhumu to capture audio from your video calls, you need to create a **Multi-Output Device** in macOS:
+### Step 6: Before Each Meeting
 
-1. Open **Audio MIDI Setup** (search in Spotlight)
-2. Click **"+"** at the bottom left → **Create Multi-Output Device**
-3. Check both **BlackHole 2ch** and your regular speakers/headphones
-4. When on a call, set this Multi-Output Device as your system sound output
+Before joining a call where you want transcription, switch your Mac's audio output:
 
-This routes audio to both your ears and Zhumu simultaneously.
+1. Look at the **top-right of your screen** (the menu bar) for the speaker/volume icon
+2. Hold the **Option** key on your keyboard and **click** the speaker icon
+3. Under **Output Device**, select **Multi-Output Device**
 
-## Usage
+> **Don't see the speaker icon?** Go to **System Settings → Sound** and enable **"Show Sound in menu bar"**.
+
+> **Note:** The volume slider won't work while using Multi-Output Device. Adjust volume in your call app (Zoom, Meet, etc.) instead.
+
+### Step 7: Run Zhumu
+
+In Terminal, make sure you're in the Zhumu folder and the virtual environment is active:
 
 ```bash
+cd mandarintranslator
 source .venv/bin/activate
 python main.py
 ```
 
-1. Click the **驻** icon in the menu bar → **Start Listening**
-2. A floating transcript window appears with translated English text
-3. Press **Cmd+Shift+S** to capture a screenshot (for slides or shared screens with Chinese text)
-4. Click the menu bar icon → **Stop & Save** when done
-5. Your transcript is saved to `~/MeetingTranscripts/`
+You'll see a small **驻** icon appear in your menu bar (top of screen, near the clock).
+
+### Step 8: During a Meeting
+
+1. **Start**: Click the **驻** icon in the menu bar → **Start Listening**
+   - A floating window will appear showing translated English text
+   - There's a ~7-8 second delay between speech and text appearing — this is normal
+
+2. **Screenshot** (optional): If someone shares a slide or screen with Chinese text, press **Cmd + Shift + S**
+   - A crosshair will appear — drag to select the area with Chinese text
+   - The text will be extracted, translated, and added to your transcript
+
+3. **Stop**: Click the **驻** icon → **Stop & Save**
+   - You'll get a notification telling you where the transcript was saved
+
+### Step 9: Find Your Transcripts
+
+Your transcripts are saved in a folder called **MeetingTranscripts** in your home directory.
+
+**To find them:**
+- Click the **驻** icon → **Open Transcripts Folder**, or
+- Open **Finder** → press **Cmd + Shift + H** (takes you to your home folder) → open the **MeetingTranscripts** folder
+
+Each meeting gets its own folder named with the date and time (e.g., `2026-03-31_14-30-00/`). Inside you'll find:
+- **transcript.md** — the full transcript (open it with any text editor, or with a Markdown viewer for nicer formatting)
+- **screenshots/** — any screenshots you captured during the meeting
+
+### After the Meeting
+
+Switch your audio back to normal:
+
+1. **Option-click** the speaker icon in the menu bar
+2. Select **MacBook Air Speakers** (or your headphones)
+
+---
+
+## Troubleshooting
+
+**BlackHole doesn't show up in Audio MIDI Setup**
+- Make sure you restarted your Mac after installing BlackHole
+- Try running `brew reinstall blackhole-2ch` in Terminal, then restart again
+
+**"Audio device not found" notification when starting**
+- BlackHole isn't installed or wasn't detected. Run `brew install blackhole-2ch` and restart your Mac
+
+**No text appearing in the transcript window**
+- Check that you selected **Multi-Output Device** as your sound output (Step 6)
+- Make sure someone is actually speaking Chinese — the app only translates Mandarin Chinese
+- Check that your call audio is working (can you hear the other people?)
+
+**Text appears but it's nonsense or repetitive**
+- This can happen if there's background noise or silence. The app automatically filters silence, but very noisy environments may cause issues
+
+**The transcript window disappeared**
+- Click the **驻** icon and make sure it says "Stop & Save" (meaning it's still listening). The window may have been moved off-screen — try stopping and restarting
+
+**"No module named..." error when running `python main.py`**
+- Make sure you activated the virtual environment first: `source .venv/bin/activate`
+- If that doesn't work, re-run: `pip install -r requirements.txt`
+
+---
 
 ## Transcript Format
 
@@ -75,7 +200,11 @@ Transcripts are saved as Markdown files with timestamps:
 > **OCR (translated):** Q4 Revenue: 2.3M RMB, User Growth: +18%, Retention: 72%
 ```
 
-## Architecture
+---
+
+## For Developers
+
+### Architecture
 
 ```
 zhumu/
@@ -99,7 +228,7 @@ zhumu/
 └── config.py                # All configuration in one place
 ```
 
-## Technical Details
+### Technical Details
 
 - **Speech model**: [faster-whisper](https://github.com/SYSTRAN/faster-whisper) `small` model with `int8` quantization, optimized for Apple Silicon
 - **Translation**: Whisper's built-in `task="translate"` for audio; [argos-translate](https://github.com/argosopentech/argos-translate) for OCR text
@@ -107,6 +236,13 @@ zhumu/
 - **OCR**: [Tesseract](https://github.com/tesseract-ocr/tesseract) with Simplified/Traditional Chinese + English
 - **Latency**: ~7-8 seconds from speech to displayed text
 - **RAM**: ~1-2 GB while running
+
+### Requirements
+
+- macOS on Apple Silicon (M-series)
+- Python 3.10+
+- BlackHole virtual audio driver
+- Tesseract OCR engine
 
 ## License
 
