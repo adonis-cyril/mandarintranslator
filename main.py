@@ -6,9 +6,11 @@ and translates it to English in near real-time.
 """
 
 import logging
-import multiprocessing
+import sys
 
-from zhumu.ui.menubar import ZhumuApp
+from PyQt6.QtWidgets import QApplication
+
+from zhumu.ui.main_window import ZhumuMainWindow
 
 
 def main():
@@ -17,10 +19,15 @@ def main():
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
         datefmt="%H:%M:%S",
     )
-    app = ZhumuApp()
-    app.run()
+    app = QApplication(sys.argv)
+    app.setApplicationName("Zhumu")
+    app.setApplicationDisplayName("Zhumu (驻目)")
+
+    window = ZhumuMainWindow()
+    window.show()
+
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":
-    multiprocessing.set_start_method("spawn")
     main()
