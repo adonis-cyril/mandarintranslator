@@ -99,6 +99,20 @@ This runs the setup script. It will:
 
 **This will take several minutes** depending on your internet speed. Let it finish completely.
 
+### Step 5b: Create a Clickable App (Optional but Recommended)
+
+Instead of opening Terminal every time, you can create a Zhumu app that lives in your Applications folder:
+
+```bash
+chmod +x create_app.sh
+./create_app.sh
+```
+
+This creates **Zhumu.app** in your `/Applications` folder. You can:
+- Find it in **Spotlight** (Cmd+Space → type "Zhumu")
+- Drag it to your **Dock** for one-click access
+- Open it from **Finder → Applications**
+
 ### Step 6: Before Each Meeting
 
 Before joining a call where you want transcription, switch your Mac's audio output:
@@ -113,15 +127,17 @@ Before joining a call where you want transcription, switch your Mac's audio outp
 
 ### Step 7: Run Zhumu
 
-In Terminal, make sure you're in the Zhumu folder and the virtual environment is active:
+**Option A — If you created the app (Step 5b):**
+Just double-click **Zhumu** from Applications, Dock, or Spotlight.
 
+**Option B — From Terminal:**
 ```bash
-cd mandarintranslator
+cd ~/mandarintranslator
 source .venv/bin/activate
 python main.py
 ```
 
-You'll see a small **驻** icon appear in your menu bar (top of screen, near the clock).
+Either way, you'll see a small **驻** icon appear in your menu bar (top of screen, near the clock).
 
 ### Step 8: During a Meeting
 
