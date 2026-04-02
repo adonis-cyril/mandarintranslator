@@ -17,17 +17,10 @@ class TranscriptionProcessor:
     def __init__(
         self,
         input_queue: queue.Queue,
-        ui_queue,  # multiprocessing.Queue — typed loosely to avoid import issues
+        ui_queue,
         session: Session,
         stop_event: threading.Event,
     ):
-        """
-        Args:
-            input_queue: Audio chunks (numpy arrays) from AudioBuffer.
-            ui_queue: Transcript entries are sent here for the UI window.
-            session: Active session for persistent storage.
-            stop_event: Signals the processor to stop.
-        """
         self._input_queue = input_queue
         self._ui_queue = ui_queue
         self._session = session
@@ -46,25 +39,26 @@ class TranscriptionProcessor:
                 continue
 
             try:
-                text = self._engine.transcribe(chunk)
+                result = self._engine.transcribe(chunk)
             except Exception:
                 logger.exception("Transcription failed for a chunk, skipping.")
                 continue
 
-            if not text:
+            if not result.has_content:
                 continue
 
             entry = TranscriptEntry(
                 timestamp=datetime.now(),
-                text=text,
+                text=result.english,
+                chinese_text=result.chinese,
                 entry_type="audio",
             )
             self._session.add_entry(entry)
 
-            # Send to UI as a simple dict (must be picklable for multiprocessing)
             self._ui_queue.put({
                 "timestamp": entry.timestamp.isoformat(),
-                "text": entry.text,
+                "text": result.english,
+                "chinese": result.chinese,
                 "type": entry.entry_type,
             })
 
