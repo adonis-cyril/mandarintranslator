@@ -23,6 +23,10 @@ echo "--- Installing BlackHole virtual audio driver ---"
 brew install blackhole-2ch || echo "BlackHole may already be installed."
 
 echo ""
+echo "--- Installing SwitchAudioSource (for auto audio switching) ---"
+brew install switchaudio-osx || echo "SwitchAudioSource may already be installed."
+
+echo ""
 echo "--- Installing Tesseract OCR with Chinese language packs ---"
 brew install tesseract
 brew install tesseract-lang  # Includes chi_sim and chi_tra
