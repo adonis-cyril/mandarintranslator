@@ -1,4 +1,4 @@
-"""System audio capture via sounddevice + BlackHole virtual audio device."""
+"""System audio capture via sounddevice."""
 
 import logging
 import queue
@@ -16,27 +16,34 @@ class AudioCaptureError(Exception):
 
 
 class AudioCapture:
-    """Captures system audio from the BlackHole virtual audio device."""
+    """Captures audio from a specified device or the default microphone."""
 
-    def __init__(self, output_queue: queue.Queue):
+    def __init__(self, output_queue: queue.Queue, device_name: str | None = None):
         """
         Args:
             output_queue: Raw audio frames (numpy arrays) are placed here.
+            device_name: Name of the audio device to use.
+                         None means use default microphone.
         """
         self._output_queue = output_queue
         self._stream: sd.InputStream | None = None
-        self._device_index = self._find_device()
+        self._device_index = self._find_device(device_name)
 
-    def _find_device(self) -> int:
-        """Find the BlackHole audio device by name."""
+    def _find_device(self, device_name: str | None) -> int | None:
+        """Find an audio device by name, or return None for default mic."""
+        if device_name is None:
+            logger.info("Using default microphone for audio capture.")
+            return None
+
         devices = sd.query_devices()
         for i, dev in enumerate(devices):
-            if config.AUDIO_DEVICE_NAME.lower() in dev["name"].lower():
+            if device_name.lower() in dev["name"].lower():
                 if dev["max_input_channels"] > 0:
                     logger.info("Found audio device: %s (index %d)", dev["name"], i)
                     return i
+
         raise AudioCaptureError(
-            f"Audio device '{config.AUDIO_DEVICE_NAME}' not found. "
+            f"Audio device '{device_name}' not found. "
             "Please install BlackHole and run setup.sh. "
             "See README for instructions."
         )
@@ -57,7 +64,7 @@ class AudioCapture:
             callback=self._audio_callback,
         )
         self._stream.start()
-        logger.info("Audio capture started.")
+        logger.info("Audio capture started (device=%s).", self._device_index)
 
     def stop(self):
         """Stop capturing audio."""
@@ -66,3 +73,16 @@ class AudioCapture:
             self._stream.close()
             self._stream = None
             logger.info("Audio capture stopped.")
+
+
+def find_blackhole() -> bool:
+    """Check if BlackHole is available as an audio device."""
+    try:
+        devices = sd.query_devices()
+        for dev in devices:
+            if config.AUDIO_DEVICE_NAME.lower() in dev["name"].lower():
+                if dev["max_input_channels"] > 0:
+                    return True
+    except Exception:
+        pass
+    return False

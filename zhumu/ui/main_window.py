@@ -7,9 +7,10 @@ import threading
 from datetime import datetime
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
-from PyQt6.QtGui import QFont, QIcon
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QApplication,
+    QComboBox,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -22,9 +23,9 @@ from PyQt6.QtWidgets import (
 
 from zhumu import config
 from zhumu.audio.buffer import AudioBuffer
-from zhumu.audio.capture import AudioCapture, AudioCaptureError
+from zhumu.audio.capture import AudioCapture, AudioCaptureError, find_blackhole
 from zhumu.screenshot.capture import ScreenshotCapture
-from zhumu.storage.session import Session, TranscriptEntry
+from zhumu.storage.session import Session
 from zhumu.transcribe.processor import TranscriptionProcessor
 
 logger = logging.getLogger(__name__)
@@ -61,7 +62,6 @@ class ZhumuMainWindow(QMainWindow):
         self.resize(600, 700)
         self.setMinimumSize(400, 400)
 
-        # Central widget
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
@@ -82,13 +82,45 @@ class ZhumuMainWindow(QMainWindow):
         header_layout.addWidget(self._status_label)
         layout.addLayout(header_layout)
 
+        # Audio source selector
+        source_layout = QHBoxLayout()
+        source_label = QLabel("Audio Source:")
+        source_label.setFont(QFont("SF Pro", 12))
+        source_label.setStyleSheet("color: #cccccc;")
+        source_layout.addWidget(source_label)
+
+        self._source_combo = QComboBox()
+        self._source_combo.setFont(QFont("SF Pro", 12))
+        self._source_combo.addItem("Microphone (built-in)", "microphone")
+        if find_blackhole():
+            self._source_combo.addItem("System Audio (BlackHole)", "blackhole")
+        self._source_combo.setStyleSheet(
+            "QComboBox {"
+            "  background-color: #2a2a2a;"
+            "  color: #e0e0e0;"
+            "  border: 1px solid #444444;"
+            "  border-radius: 4px;"
+            "  padding: 4px 8px;"
+            "}"
+            "QComboBox::drop-down { border: none; }"
+            "QComboBox QAbstractItemView {"
+            "  background-color: #2a2a2a;"
+            "  color: #e0e0e0;"
+            "  selection-background-color: #444444;"
+            "}"
+        )
+        source_layout.addWidget(self._source_combo, stretch=1)
+        layout.addLayout(source_layout)
+
         # Transcript area
         self._transcript = QTextEdit()
         self._transcript.setReadOnly(True)
         self._transcript.setFont(QFont("SF Pro", 13))
         self._transcript.setPlaceholderText(
             "Transcript will appear here when you start listening...\n\n"
-            "Click 'Start Listening' to begin capturing audio from your meeting."
+            "Select your audio source above, then click 'Start Listening'.\n\n"
+            "  \u2022 Microphone: captures speech directly from your laptop mic\n"
+            "  \u2022 System Audio: captures call audio (requires BlackHole setup)"
         )
         self._transcript.setStyleSheet(
             "QTextEdit {"
@@ -109,21 +141,11 @@ class ZhumuMainWindow(QMainWindow):
         self._listen_btn.setFont(QFont("SF Pro", 14, QFont.Weight.DemiBold))
         self._listen_btn.setFixedHeight(44)
         self._listen_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._listen_btn.setStyleSheet(
-            "QPushButton {"
-            "  background-color: #2d7d46;"
-            "  color: #ffffff;"
-            "  border: none;"
-            "  border-radius: 8px;"
-            "  padding: 0 24px;"
-            "}"
-            "QPushButton:hover { background-color: #35914f; }"
-            "QPushButton:pressed { background-color: #256b3a; }"
-        )
+        self._listen_btn.setStyleSheet(self._green_button_style())
         self._listen_btn.clicked.connect(self._toggle_listening)
         button_layout.addWidget(self._listen_btn, stretch=1)
 
-        self._screenshot_btn = QPushButton("Screenshot (Cmd+Shift+S)")
+        self._screenshot_btn = QPushButton("Screenshot")
         self._screenshot_btn.setFont(QFont("SF Pro", 12))
         self._screenshot_btn.setFixedHeight(44)
         self._screenshot_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -145,7 +167,7 @@ class ZhumuMainWindow(QMainWindow):
 
         layout.addLayout(button_layout)
 
-        # Bottom row — Open Transcripts
+        # Bottom row
         bottom_layout = QHBoxLayout()
 
         self._open_folder_btn = QPushButton("Open Transcripts Folder")
@@ -157,7 +179,6 @@ class ZhumuMainWindow(QMainWindow):
             "  background-color: transparent;"
             "  color: #6eaaff;"
             "  border: none;"
-            "  text-decoration: underline;"
             "}"
             "QPushButton:hover { color: #99c4ff; }"
         )
@@ -173,11 +194,39 @@ class ZhumuMainWindow(QMainWindow):
             "QWidget { background-color: #1e1e1e; }"
         )
 
-        # Queue polling timer (for receiving transcript entries from threads)
+        # Queue polling timer
         self._ui_queue: queue.Queue = queue.Queue()
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._poll_queue)
         self._poll_timer.start(100)
+
+    @staticmethod
+    def _green_button_style() -> str:
+        return (
+            "QPushButton {"
+            "  background-color: #2d7d46;"
+            "  color: #ffffff;"
+            "  border: none;"
+            "  border-radius: 8px;"
+            "  padding: 0 24px;"
+            "}"
+            "QPushButton:hover { background-color: #35914f; }"
+            "QPushButton:pressed { background-color: #256b3a; }"
+        )
+
+    @staticmethod
+    def _red_button_style() -> str:
+        return (
+            "QPushButton {"
+            "  background-color: #c0392b;"
+            "  color: #ffffff;"
+            "  border: none;"
+            "  border-radius: 8px;"
+            "  padding: 0 24px;"
+            "}"
+            "QPushButton:hover { background-color: #d64937; }"
+            "QPushButton:pressed { background-color: #a93226; }"
+        )
 
     def _toggle_listening(self):
         if self._is_listening:
@@ -187,6 +236,7 @@ class ZhumuMainWindow(QMainWindow):
 
     def _start_pipeline(self):
         self._signals.status_changed.emit("Loading model...")
+        self._listen_btn.setEnabled(False)
 
         self._session = Session()
         session_dir = self._session.start()
@@ -196,9 +246,12 @@ class ZhumuMainWindow(QMainWindow):
         chunk_queue = queue.Queue()
         self._stop_event = threading.Event()
 
-        # Audio capture
+        # Determine audio source
+        source = self._source_combo.currentData()
+        device_name = config.AUDIO_DEVICE_NAME if source == "blackhole" else None
+
         try:
-            self._audio_capture = AudioCapture(raw_audio_queue)
+            self._audio_capture = AudioCapture(raw_audio_queue, device_name)
             self._audio_capture.start()
         except AudioCaptureError as e:
             QMessageBox.warning(
@@ -207,6 +260,7 @@ class ZhumuMainWindow(QMainWindow):
                 f"{e}\n\nPlease install BlackHole and set up a Multi-Output Device.\nSee the README for instructions.",
             )
             self._signals.status_changed.emit("Error: No audio device")
+            self._listen_btn.setEnabled(True)
             self._session = None
             return
 
@@ -226,25 +280,18 @@ class ZhumuMainWindow(QMainWindow):
         )
         self._processor_thread.start()
 
-        # Screenshot capture (hotkey listener)
+        # Screenshot capture (button-triggered only, no hotkey)
         self._screenshot_capture = ScreenshotCapture(self._session, self._ui_queue)
-        self._screenshot_capture.start()
 
         self._is_listening = True
+        self._listen_btn.setEnabled(True)
         self._listen_btn.setText("Stop & Save")
-        self._listen_btn.setStyleSheet(
-            "QPushButton {"
-            "  background-color: #c0392b;"
-            "  color: #ffffff;"
-            "  border: none;"
-            "  border-radius: 8px;"
-            "  padding: 0 24px;"
-            "}"
-            "QPushButton:hover { background-color: #d64937; }"
-            "QPushButton:pressed { background-color: #a93226; }"
-        )
+        self._listen_btn.setStyleSheet(self._red_button_style())
         self._screenshot_btn.setEnabled(True)
-        self._signals.status_changed.emit("Listening...")
+        self._source_combo.setEnabled(False)
+
+        source_name = "microphone" if device_name is None else "BlackHole"
+        self._signals.status_changed.emit(f"Listening ({source_name})...")
 
     def _stop_pipeline(self):
         self._signals.status_changed.emit("Saving...")
@@ -256,9 +303,7 @@ class ZhumuMainWindow(QMainWindow):
             self._audio_capture.stop()
             self._audio_capture = None
 
-        if self._screenshot_capture:
-            self._screenshot_capture.stop()
-            self._screenshot_capture = None
+        self._screenshot_capture = None
 
         if self._buffer_thread and self._buffer_thread.is_alive():
             self._buffer_thread.join(timeout=3)
@@ -272,18 +317,9 @@ class ZhumuMainWindow(QMainWindow):
 
         self._is_listening = False
         self._listen_btn.setText("Start Listening")
-        self._listen_btn.setStyleSheet(
-            "QPushButton {"
-            "  background-color: #2d7d46;"
-            "  color: #ffffff;"
-            "  border: none;"
-            "  border-radius: 8px;"
-            "  padding: 0 24px;"
-            "}"
-            "QPushButton:hover { background-color: #35914f; }"
-            "QPushButton:pressed { background-color: #256b3a; }"
-        )
+        self._listen_btn.setStyleSheet(self._green_button_style())
         self._screenshot_btn.setEnabled(False)
+        self._source_combo.setEnabled(True)
 
         if session_dir:
             self._signals.status_changed.emit(f"Saved to {session_dir.name}")
@@ -293,7 +329,7 @@ class ZhumuMainWindow(QMainWindow):
 
     def _take_screenshot(self):
         if self._screenshot_capture:
-            self._screenshot_capture._on_hotkey()
+            self._screenshot_capture.take_screenshot()
 
     def _open_transcripts(self):
         config.TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
