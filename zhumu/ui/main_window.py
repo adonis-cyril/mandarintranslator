@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMainWindow,
     QPushButton,
+    QSplitter,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -32,13 +33,11 @@ logger = logging.getLogger(__name__)
 
 
 class TranscriptSignals(QObject):
-    """Signals for thread-safe UI updates."""
     new_entry = pyqtSignal(dict)
     status_changed = pyqtSignal(str)
 
 
 class ZhumuMainWindow(QMainWindow):
-    """Main application window with transcript display and controls."""
 
     def __init__(self):
         super().__init__()
@@ -46,7 +45,6 @@ class ZhumuMainWindow(QMainWindow):
         self._signals.new_entry.connect(self._append_entry)
         self._signals.status_changed.connect(self._update_status)
 
-        # Pipeline state
         self._session: Session | None = None
         self._audio_capture: AudioCapture | None = None
         self._screenshot_capture: ScreenshotCapture | None = None
@@ -59,8 +57,8 @@ class ZhumuMainWindow(QMainWindow):
 
     def _init_ui(self):
         self.setWindowTitle("Zhumu (驻目) — Meeting Transcriber")
-        self.resize(600, 700)
-        self.setMinimumSize(400, 400)
+        self.resize(1000, 700)
+        self.setMinimumSize(600, 400)
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -93,7 +91,7 @@ class ZhumuMainWindow(QMainWindow):
         self._source_combo.setFont(QFont("SF Pro", 12))
         self._source_combo.addItem("Microphone (built-in)", "microphone")
         if find_blackhole():
-            self._source_combo.addItem("System Audio (BlackHole)", "blackhole")
+            self._source_combo.addItem("System Audio + Speakers (BlackHole)", "blackhole")
         self._source_combo.setStyleSheet(
             "QComboBox {"
             "  background-color: #2a2a2a;"
@@ -112,17 +110,20 @@ class ZhumuMainWindow(QMainWindow):
         source_layout.addWidget(self._source_combo, stretch=1)
         layout.addLayout(source_layout)
 
-        # Transcript area
-        self._transcript = QTextEdit()
-        self._transcript.setReadOnly(True)
-        self._transcript.setFont(QFont("SF Pro", 13))
-        self._transcript.setPlaceholderText(
-            "Transcript will appear here when you start listening...\n\n"
-            "Select your audio source above, then click 'Start Listening'.\n\n"
-            "  \u2022 Microphone: captures speech directly from your laptop mic\n"
-            "  \u2022 System Audio: captures call audio (requires BlackHole setup)"
-        )
-        self._transcript.setStyleSheet(
+        # Column headers
+        col_header = QHBoxLayout()
+        zh_header = QLabel("Chinese (Original)")
+        zh_header.setFont(QFont("SF Pro", 12, QFont.Weight.DemiBold))
+        zh_header.setStyleSheet("color: #aaaaaa;")
+        col_header.addWidget(zh_header)
+        en_header = QLabel("English (Translation)")
+        en_header.setFont(QFont("SF Pro", 12, QFont.Weight.DemiBold))
+        en_header.setStyleSheet("color: #aaaaaa;")
+        col_header.addWidget(en_header)
+        layout.addLayout(col_header)
+
+        # Side-by-side transcript panels
+        transcript_style = (
             "QTextEdit {"
             "  background-color: #2a2a2a;"
             "  color: #e0e0e0;"
@@ -131,7 +132,27 @@ class ZhumuMainWindow(QMainWindow):
             "  padding: 12px;"
             "}"
         )
-        layout.addWidget(self._transcript, stretch=1)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+
+        self._chinese_panel = QTextEdit()
+        self._chinese_panel.setReadOnly(True)
+        self._chinese_panel.setFont(QFont("SF Pro", 13))
+        self._chinese_panel.setPlaceholderText("Chinese transcript will appear here...")
+        self._chinese_panel.setStyleSheet(transcript_style)
+
+        self._english_panel = QTextEdit()
+        self._english_panel.setReadOnly(True)
+        self._english_panel.setFont(QFont("SF Pro", 13))
+        self._english_panel.setPlaceholderText("English translation will appear here...")
+        self._english_panel.setStyleSheet(transcript_style)
+
+        splitter.addWidget(self._chinese_panel)
+        splitter.addWidget(self._english_panel)
+        splitter.setSizes([500, 500])
+        splitter.setStyleSheet("QSplitter::handle { background-color: #333333; width: 2px; }")
+
+        layout.addWidget(splitter, stretch=1)
 
         # Button row
         button_layout = QHBoxLayout()
@@ -169,7 +190,6 @@ class ZhumuMainWindow(QMainWindow):
 
         # Bottom row
         bottom_layout = QHBoxLayout()
-
         self._open_folder_btn = QPushButton("Open Transcripts Folder")
         self._open_folder_btn.setFont(QFont("SF Pro", 11))
         self._open_folder_btn.setFixedHeight(32)
@@ -185,7 +205,6 @@ class ZhumuMainWindow(QMainWindow):
         self._open_folder_btn.clicked.connect(self._open_transcripts)
         bottom_layout.addWidget(self._open_folder_btn)
         bottom_layout.addStretch()
-
         layout.addLayout(bottom_layout)
 
         # Window styling
@@ -194,7 +213,7 @@ class ZhumuMainWindow(QMainWindow):
             "QWidget { background-color: #1e1e1e; }"
         )
 
-        # Queue polling timer
+        # Queue polling
         self._ui_queue: queue.Queue = queue.Queue()
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._poll_queue)
@@ -204,11 +223,8 @@ class ZhumuMainWindow(QMainWindow):
     def _green_button_style() -> str:
         return (
             "QPushButton {"
-            "  background-color: #2d7d46;"
-            "  color: #ffffff;"
-            "  border: none;"
-            "  border-radius: 8px;"
-            "  padding: 0 24px;"
+            "  background-color: #2d7d46; color: #ffffff;"
+            "  border: none; border-radius: 8px; padding: 0 24px;"
             "}"
             "QPushButton:hover { background-color: #35914f; }"
             "QPushButton:pressed { background-color: #256b3a; }"
@@ -218,11 +234,8 @@ class ZhumuMainWindow(QMainWindow):
     def _red_button_style() -> str:
         return (
             "QPushButton {"
-            "  background-color: #c0392b;"
-            "  color: #ffffff;"
-            "  border: none;"
-            "  border-radius: 8px;"
-            "  padding: 0 24px;"
+            "  background-color: #c0392b; color: #ffffff;"
+            "  border: none; border-radius: 8px; padding: 0 24px;"
             "}"
             "QPushButton:hover { background-color: #d64937; }"
             "QPushButton:pressed { background-color: #a93226; }"
@@ -246,7 +259,6 @@ class ZhumuMainWindow(QMainWindow):
         chunk_queue = queue.Queue()
         self._stop_event = threading.Event()
 
-        # Determine audio source
         source = self._source_combo.currentData()
         device_name = config.AUDIO_DEVICE_NAME if source == "blackhole" else None
 
@@ -264,14 +276,12 @@ class ZhumuMainWindow(QMainWindow):
             self._session = None
             return
 
-        # Audio buffer thread
         audio_buffer = AudioBuffer(raw_audio_queue, chunk_queue, self._stop_event)
         self._buffer_thread = threading.Thread(
             target=audio_buffer.run, name="audio-buffer", daemon=True
         )
         self._buffer_thread.start()
 
-        # Transcription processor thread
         processor = TranscriptionProcessor(
             chunk_queue, self._ui_queue, self._session, self._stop_event
         )
@@ -280,7 +290,6 @@ class ZhumuMainWindow(QMainWindow):
         )
         self._processor_thread.start()
 
-        # Screenshot capture (button-triggered only, no hotkey)
         self._screenshot_capture = ScreenshotCapture(self._session, self._ui_queue)
 
         self._is_listening = True
@@ -290,7 +299,7 @@ class ZhumuMainWindow(QMainWindow):
         self._screenshot_btn.setEnabled(True)
         self._source_combo.setEnabled(False)
 
-        source_name = "microphone" if device_name is None else "BlackHole"
+        source_name = "microphone" if device_name is None else "system audio"
         self._signals.status_changed.emit(f"Listening ({source_name})...")
 
     def _stop_pipeline(self):
@@ -298,11 +307,9 @@ class ZhumuMainWindow(QMainWindow):
 
         if self._stop_event:
             self._stop_event.set()
-
         if self._audio_capture:
             self._audio_capture.stop()
             self._audio_capture = None
-
         self._screenshot_capture = None
 
         if self._buffer_thread and self._buffer_thread.is_alive():
@@ -323,7 +330,6 @@ class ZhumuMainWindow(QMainWindow):
 
         if session_dir:
             self._signals.status_changed.emit(f"Saved to {session_dir.name}")
-            logger.info("Session saved: %s", session_dir)
         else:
             self._signals.status_changed.emit("Ready")
 
@@ -349,29 +355,30 @@ class ZhumuMainWindow(QMainWindow):
         except (KeyError, ValueError):
             ts = "??:??:??"
 
-        text = msg.get("text", "")
         entry_type = msg.get("type", "audio")
+        chinese = msg.get("chinese", "")
+        english = msg.get("text", "")
 
         if entry_type == "screenshot":
             screenshot = msg.get("screenshot", "")
-            html = (
+            shot_html = (
                 f'<p style="color: #ffa500; margin: 4px 0;">'
-                f'<b>[{ts}]</b> \U0001f4f8 Screenshot: {screenshot}'
+                f'<b>[{ts}]</b> \U0001f4f8 {screenshot}'
                 f'</p>'
-                f'<blockquote style="color: #aaaaaa; margin: 2px 0 8px 12px;">'
-                f'<b>OCR (translated):</b> {text}'
-                f'</blockquote>'
+                f'<p style="color: #aaaaaa; margin: 2px 0 8px 0;">{english}</p>'
             )
+            self._chinese_panel.append(shot_html)
+            self._english_panel.append(shot_html)
         else:
-            html = (
-                f'<p style="margin: 4px 0;">'
-                f'<b style="color: #888888;">[{ts}]</b> {text}'
-                f'</p>'
-            )
+            zh_html = f'<p style="margin: 4px 0;"><b style="color: #888888;">[{ts}]</b> {chinese}</p>'
+            en_html = f'<p style="margin: 4px 0;"><b style="color: #888888;">[{ts}]</b> {english}</p>'
+            self._chinese_panel.append(zh_html)
+            self._english_panel.append(en_html)
 
-        self._transcript.append(html)
-        scrollbar = self._transcript.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+        # Auto-scroll both panels
+        for panel in (self._chinese_panel, self._english_panel):
+            sb = panel.verticalScrollBar()
+            sb.setValue(sb.maximum())
 
     def _update_status(self, text: str):
         self._status_label.setText(text)
