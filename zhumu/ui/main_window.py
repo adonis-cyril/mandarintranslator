@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
 from zhumu import config
 from zhumu.audio.buffer import AudioBuffer
 from zhumu.audio.capture import AudioCapture, AudioCaptureError, find_blackhole
+from zhumu.audio.switch import switch_to_multi_output, switch_to_speakers
 from zhumu.screenshot.capture import ScreenshotCapture
 from zhumu.storage.session import Session
 from zhumu.transcribe.processor import TranscriptionProcessor
@@ -52,6 +53,7 @@ class ZhumuMainWindow(QMainWindow):
         self._buffer_thread: threading.Thread | None = None
         self._processor_thread: threading.Thread | None = None
         self._is_listening = False
+        self._previous_audio_output: str | None = None  # to restore after stopping
 
         self._init_ui()
 
@@ -262,6 +264,13 @@ class ZhumuMainWindow(QMainWindow):
         source = self._source_combo.currentData()
         device_name = config.AUDIO_DEVICE_NAME if source == "blackhole" else None
 
+        # Auto-switch macOS audio output when using BlackHole
+        if source == "blackhole":
+            self._previous_audio_output = switch_to_multi_output()
+            if self._previous_audio_output:
+                logger.info("Auto-switched audio output to Multi-Output Device (was: %s).",
+                            self._previous_audio_output)
+
         try:
             self._audio_capture = AudioCapture(raw_audio_queue, device_name)
             self._audio_capture.start()
@@ -321,6 +330,12 @@ class ZhumuMainWindow(QMainWindow):
         if self._session:
             session_dir = self._session.stop()
             self._session = None
+
+        # Auto-switch audio output back to previous device
+        if self._previous_audio_output:
+            switch_to_speakers(self._previous_audio_output)
+            logger.info("Auto-switched audio output back to '%s'.", self._previous_audio_output)
+            self._previous_audio_output = None
 
         self._is_listening = False
         self._listen_btn.setText("Start Listening")
