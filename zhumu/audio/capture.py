@@ -29,22 +29,37 @@ class AudioCapture:
         self._stream: sd.InputStream | None = None
         self._device_index = self._find_device(device_name)
 
+    @staticmethod
+    def _available_input_devices() -> list[str]:
+        devices = sd.query_devices()
+        return [
+            dev["name"]
+            for dev in devices
+            if dev.get("max_input_channels", 0) > 0
+        ]
+
     def _find_device(self, device_name: str | None) -> int | None:
         """Find an audio device by name, or return None for default mic."""
         if device_name is None:
             logger.info("Using default microphone for audio capture.")
             return None
 
-        devices = sd.query_devices()
+        try:
+            devices = sd.query_devices()
+        except Exception as exc:
+            raise AudioCaptureError(f"Unable to query audio devices: {exc}") from exc
+
         for i, dev in enumerate(devices):
             if device_name.lower() in dev["name"].lower():
                 if dev["max_input_channels"] > 0:
                     logger.info("Found audio device: %s (index %d)", dev["name"], i)
                     return i
 
+        available = ", ".join(self._available_input_devices()) or "none detected"
         raise AudioCaptureError(
             f"Audio device '{device_name}' not found. "
             "Please install BlackHole and run setup.sh. "
+            f"Available input devices: {available}. "
             "See README for instructions."
         )
 
@@ -56,14 +71,22 @@ class AudioCapture:
 
     def start(self):
         """Start capturing audio."""
-        self._stream = sd.InputStream(
-            device=self._device_index,
-            samplerate=config.SAMPLE_RATE,
-            channels=1,
-            dtype="float32",
-            callback=self._audio_callback,
-        )
-        self._stream.start()
+        try:
+            self._stream = sd.InputStream(
+                device=self._device_index,
+                samplerate=config.SAMPLE_RATE,
+                channels=1,
+                dtype="float32",
+                callback=self._audio_callback,
+            )
+            self._stream.start()
+        except Exception as exc:
+            raise AudioCaptureError(
+                "Unable to start audio capture. "
+                "Check microphone permissions or your selected input device. "
+                f"Details: {exc}"
+            ) from exc
+
         logger.info("Audio capture started (device=%s).", self._device_index)
 
     def stop(self):

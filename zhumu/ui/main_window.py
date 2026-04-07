@@ -5,6 +5,7 @@ import queue
 import subprocess
 import threading
 from datetime import datetime
+from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
 from PyQt6.QtGui import QFont
@@ -54,6 +55,7 @@ class ZhumuMainWindow(QMainWindow):
         self._processor_thread: threading.Thread | None = None
         self._is_listening = False
         self._previous_audio_output: str | None = None  # to restore after stopping
+        self._active_source: str | None = None
 
         self._init_ui()
 
@@ -221,6 +223,10 @@ class ZhumuMainWindow(QMainWindow):
         self._poll_timer.timeout.connect(self._poll_queue)
         self._poll_timer.start(100)
 
+    def _clear_transcript_panels(self):
+        self._chinese_panel.clear()
+        self._english_panel.clear()
+
     @staticmethod
     def _green_button_style() -> str:
         return (
@@ -249,8 +255,66 @@ class ZhumuMainWindow(QMainWindow):
         else:
             self._start_pipeline()
 
+    def _reset_pipeline_state(self):
+        self._audio_capture = None
+        self._screenshot_capture = None
+        self._buffer_thread = None
+        self._processor_thread = None
+        self._stop_event = None
+        self._is_listening = False
+        self._active_source = None
+
+        self._listen_btn.setEnabled(True)
+        self._listen_btn.setText("Start Listening")
+        self._listen_btn.setStyleSheet(self._green_button_style())
+        self._screenshot_btn.setEnabled(False)
+        self._source_combo.setEnabled(True)
+
+    def _cleanup_pipeline(self) -> tuple[Path | None, bool]:
+        session_dir: Path | None = None
+        restored_audio = False
+
+        if self._stop_event:
+            self._stop_event.set()
+        if self._audio_capture:
+            self._audio_capture.stop()
+
+        self._screenshot_capture = None
+
+        if self._buffer_thread and self._buffer_thread.is_alive():
+            self._buffer_thread.join(timeout=3)
+        if self._processor_thread and self._processor_thread.is_alive():
+            self._processor_thread.join(timeout=5)
+
+        if self._session:
+            session_dir = self._session.stop()
+            self._session = None
+
+        if self._previous_audio_output:
+            restored_audio = switch_to_speakers(self._previous_audio_output)
+            if restored_audio:
+                logger.info(
+                    "Auto-switched audio output back to '%s'.",
+                    self._previous_audio_output,
+                )
+            self._previous_audio_output = None
+
+        self._reset_pipeline_state()
+        return session_dir, restored_audio
+
+    def _handle_pipeline_failure(self, message: str):
+        session_dir, _ = self._cleanup_pipeline()
+        self._signals.status_changed.emit("Error")
+
+        detail = message
+        if session_dir is not None:
+            detail += f"\n\nAny partial transcript was saved to:\n{session_dir}"
+
+        QMessageBox.critical(self, "Zhumu Error", detail)
+
     def _start_pipeline(self):
-        self._signals.status_changed.emit("Loading model...")
+        self._clear_transcript_panels()
+        self._signals.status_changed.emit("Preparing session...")
         self._listen_btn.setEnabled(False)
 
         self._session = Session()
@@ -263,13 +327,23 @@ class ZhumuMainWindow(QMainWindow):
 
         source = self._source_combo.currentData()
         device_name = config.AUDIO_DEVICE_NAME if source == "blackhole" else None
+        self._active_source = source
 
         # Auto-switch macOS audio output when using BlackHole
         if source == "blackhole":
-            self._previous_audio_output = switch_to_multi_output()
-            if self._previous_audio_output:
+            switched, previous_output = switch_to_multi_output()
+            self._previous_audio_output = previous_output
+            if switched:
                 logger.info("Auto-switched audio output to Multi-Output Device (was: %s).",
-                            self._previous_audio_output)
+                            previous_output or "unknown")
+            else:
+                QMessageBox.information(
+                    self,
+                    "Automatic Audio Switching Unavailable",
+                    "Zhumu could not switch your Mac output automatically.\n\n"
+                    "If you do not see transcript text, set your output device to "
+                    "\"Multi-Output Device\" manually and try again.",
+                )
 
         try:
             self._audio_capture = AudioCapture(raw_audio_queue, device_name)
@@ -277,12 +351,21 @@ class ZhumuMainWindow(QMainWindow):
         except AudioCaptureError as e:
             QMessageBox.warning(
                 self,
-                "Audio Device Not Found",
-                f"{e}\n\nPlease install BlackHole and set up a Multi-Output Device.\nSee the README for instructions.",
+                "Audio Capture Unavailable",
+                f"{e}\n\nPlease check the README for setup and permissions instructions.",
             )
-            self._signals.status_changed.emit("Error: No audio device")
-            self._listen_btn.setEnabled(True)
-            self._session = None
+            self._cleanup_pipeline()
+            self._signals.status_changed.emit("Error: Audio unavailable")
+            return
+        except Exception as e:
+            logger.exception("Unexpected startup failure.")
+            QMessageBox.critical(
+                self,
+                "Unable to Start Zhumu",
+                f"Zhumu hit an unexpected startup error:\n\n{e}",
+            )
+            self._cleanup_pipeline()
+            self._signals.status_changed.emit("Error: Startup failed")
             return
 
         audio_buffer = AudioBuffer(raw_audio_queue, chunk_queue, self._stop_event)
@@ -309,42 +392,22 @@ class ZhumuMainWindow(QMainWindow):
         self._source_combo.setEnabled(False)
 
         source_name = "microphone" if device_name is None else "system audio"
-        self._signals.status_changed.emit(f"Listening ({source_name})...")
+        self._signals.status_changed.emit(f"Starting ({source_name})...")
 
     def _stop_pipeline(self):
         self._signals.status_changed.emit("Saving...")
+        self._listen_btn.setEnabled(False)
 
-        if self._stop_event:
-            self._stop_event.set()
-        if self._audio_capture:
-            self._audio_capture.stop()
-            self._audio_capture = None
-        self._screenshot_capture = None
-
-        if self._buffer_thread and self._buffer_thread.is_alive():
-            self._buffer_thread.join(timeout=3)
-        if self._processor_thread and self._processor_thread.is_alive():
-            self._processor_thread.join(timeout=5)
-
-        session_dir = None
-        if self._session:
-            session_dir = self._session.stop()
-            self._session = None
-
-        # Auto-switch audio output back to previous device
-        if self._previous_audio_output:
-            switch_to_speakers(self._previous_audio_output)
-            logger.info("Auto-switched audio output back to '%s'.", self._previous_audio_output)
-            self._previous_audio_output = None
-
-        self._is_listening = False
-        self._listen_btn.setText("Start Listening")
-        self._listen_btn.setStyleSheet(self._green_button_style())
-        self._screenshot_btn.setEnabled(False)
-        self._source_combo.setEnabled(True)
+        active_source = self._active_source
+        session_dir, restored_audio = self._cleanup_pipeline()
 
         if session_dir:
-            self._signals.status_changed.emit(f"Saved to {session_dir.name}")
+            if active_source == "blackhole" and not restored_audio:
+                self._signals.status_changed.emit(
+                    f"Saved to {session_dir.name} (restore output manually if needed)"
+                )
+            else:
+                self._signals.status_changed.emit(f"Saved to {session_dir.name}")
         else:
             self._signals.status_changed.emit("Ready")
 
@@ -362,6 +425,12 @@ class ZhumuMainWindow(QMainWindow):
                 msg = self._ui_queue.get_nowait()
             except queue.Empty:
                 break
+            if msg.get("type") == "status":
+                self._update_status(msg.get("status", ""))
+                continue
+            if msg.get("type") == "fatal_error":
+                self._handle_pipeline_failure(msg.get("text", "Zhumu hit an unknown error."))
+                continue
             self._append_entry(msg)
 
     def _append_entry(self, msg: dict):
@@ -401,7 +470,7 @@ class ZhumuMainWindow(QMainWindow):
             self._status_label.setStyleSheet("color: #2ecc71;")
         elif "Error" in text:
             self._status_label.setStyleSheet("color: #e74c3c;")
-        elif "Saving" in text or "Loading" in text:
+        elif "Saving" in text or "Loading" in text or "Preparing" in text or "Starting" in text:
             self._status_label.setStyleSheet("color: #f39c12;")
         else:
             self._status_label.setStyleSheet("color: #888888;")

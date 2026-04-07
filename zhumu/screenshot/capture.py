@@ -4,7 +4,6 @@ import logging
 import subprocess
 import threading
 from datetime import datetime
-from pathlib import Path
 
 from zhumu import config
 from zhumu.screenshot.ocr import extract_text

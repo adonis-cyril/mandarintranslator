@@ -20,10 +20,9 @@ mkdir -p "${RESOURCES_DIR}"
 # Create the launcher script
 cat > "${MACOS_DIR}/${APP_NAME}" << LAUNCHER
 #!/bin/bash
-# Zhumu launcher — activates the venv and runs the app
+# Zhumu launcher — runs the app with the project virtualenv
 cd "${SCRIPT_DIR}"
-source .venv/bin/activate
-exec python main.py
+exec "${SCRIPT_DIR}/.venv/bin/python" main.py
 LAUNCHER
 chmod +x "${MACOS_DIR}/${APP_NAME}"
 
@@ -47,8 +46,6 @@ cat > "${CONTENTS_DIR}/Info.plist" << 'PLIST'
     <string>Zhumu</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
-    <key>LSUIElement</key>
-    <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>

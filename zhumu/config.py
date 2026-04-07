@@ -5,7 +5,7 @@ from pathlib import Path
 # Audio capture
 AUDIO_DEVICE_NAME = "BlackHole 2ch"
 SAMPLE_RATE = 16000
-CHUNK_DURATION_SECONDS = 5
+CHUNK_DURATION_SECONDS = 3
 SILENCE_THRESHOLD = 0.01  # RMS below this is considered silence
 
 # Whisper transcription
