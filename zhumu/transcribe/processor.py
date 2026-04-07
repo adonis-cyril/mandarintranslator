@@ -27,10 +27,28 @@ class TranscriptionProcessor:
         self._stop_event = stop_event
         self._engine = WhisperEngine()
 
+    def _send_status(self, text: str):
+        self._ui_queue.put({"type": "status", "status": text})
+
+    def _send_fatal_error(self, text: str):
+        self._ui_queue.put({"type": "fatal_error", "text": text})
+
     def run(self):
         """Main loop — process audio chunks. Run this in a thread."""
-        self._engine.load()
+        self._send_status("Loading speech model...")
+        try:
+            self._engine.load()
+        except Exception:
+            logger.exception("Failed to load Whisper model.")
+            self._stop_event.set()
+            self._send_fatal_error(
+                "Zhumu could not load the local speech model. "
+                "Please run setup.sh again and make sure the Whisper model download completed."
+            )
+            return
+
         logger.info("Transcription processor started.")
+        self._send_status("Listening...")
 
         while not self._stop_event.is_set():
             try:

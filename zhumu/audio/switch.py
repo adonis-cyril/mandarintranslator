@@ -1,6 +1,7 @@
 """macOS audio output device switching."""
 
 import logging
+import shutil
 import subprocess
 
 logger = logging.getLogger(__name__)
@@ -10,88 +11,75 @@ MULTI_OUTPUT_DEVICE = "Multi-Output Device"
 DEFAULT_SPEAKERS = "MacBook Air Speakers"
 
 
-def _run_osascript(script: str) -> str:
-    """Run an AppleScript and return stdout."""
-    result = subprocess.run(
-        ["osascript", "-e", script],
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    return result.stdout.strip()
+def _run_switch_audio(*args: str) -> subprocess.CompletedProcess[str] | None:
+    """Run SwitchAudioSource if it is installed."""
+    if shutil.which("SwitchAudioSource") is None:
+        logger.info("SwitchAudioSource is not installed; automatic output switching is disabled.")
+        return None
 
-
-def get_current_output() -> str:
-    """Get the name of the current system audio output device."""
     try:
-        return _run_osascript(
-            'get name of current output device of (get volume settings)'
-        )
-    except Exception:
-        # Fallback: use system_profiler
-        try:
-            result = subprocess.run(
-                ["SwitchAudioSource", "-c"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            return result.stdout.strip()
-        except FileNotFoundError:
-            logger.debug("SwitchAudioSource not installed.")
-            return ""
-
-
-def set_output_device(device_name: str) -> bool:
-    """Switch the macOS system audio output device.
-
-    Tries SwitchAudioSource first (if installed), then falls back to AppleScript.
-
-    Returns True if successful.
-    """
-    # Try SwitchAudioSource (brew install switchaudio-osx)
-    try:
-        result = subprocess.run(
-            ["SwitchAudioSource", "-s", device_name],
+        return subprocess.run(
+            ["SwitchAudioSource", *args],
             capture_output=True,
             text=True,
             timeout=5,
         )
-        if result.returncode == 0:
-            logger.info("Switched audio output to '%s' via SwitchAudioSource.", device_name)
-            return True
-    except FileNotFoundError:
-        pass
+    except Exception:
+        logger.exception("SwitchAudioSource command failed.")
+        return None
 
-    # Fallback: AppleScript
-    try:
-        script = f'''
-        tell application "System Events"
-            -- This approach uses the audio device name directly
-        end tell
-        do shell command "osascript -e 'set volume output device \\"{device_name}\\"'"
-        '''
-        # Direct approach via NSAppleScript-style command
-        _run_osascript(
-            f'set volume output device "{device_name}"'
-        )
-        logger.info("Switched audio output to '%s' via AppleScript.", device_name)
+
+def get_available_outputs() -> list[str]:
+    """List available macOS output devices."""
+    result = _run_switch_audio("-a", "-t", "output")
+    if result is None or result.returncode != 0:
+        return []
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def get_current_output() -> str:
+    """Get the name of the current system audio output device."""
+    result = _run_switch_audio("-c", "-t", "output")
+    if result is None or result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
+def set_output_device(device_name: str) -> bool:
+    """Switch the macOS system audio output device."""
+    if not device_name:
+        return False
+
+    result = _run_switch_audio("-s", device_name, "-t", "output")
+    if result is None:
+        return False
+    if result.returncode == 0:
+        logger.info("Switched audio output to '%s'.", device_name)
         return True
-    except Exception as e:
-        logger.warning("Failed to switch audio output to '%s': %s", device_name, e)
 
+    available = ", ".join(get_available_outputs()) or "no outputs detected"
+    stderr = result.stderr.strip() or "unknown error"
+    logger.warning(
+        "Failed to switch audio output to '%s': %s. Available outputs: %s",
+        device_name,
+        stderr,
+        available,
+    )
     return False
 
 
-def switch_to_multi_output() -> str | None:
-    """Switch to Multi-Output Device. Returns the previous device name (to restore later)."""
+def switch_to_multi_output() -> tuple[bool, str | None]:
+    """Switch to Multi-Output Device.
+
+    Returns a tuple of (success, previous_device_name).
+    """
     previous = get_current_output()
     if set_output_device(MULTI_OUTPUT_DEVICE):
-        return previous
-    return None
+        return True, previous or None
+    return False, previous or None
 
 
-def switch_to_speakers(device_name: str | None = None):
+def switch_to_speakers(device_name: str | None = None) -> bool:
     """Switch back to speakers (or the specified device)."""
     target = device_name or DEFAULT_SPEAKERS
-    set_output_device(target)
+    return set_output_device(target)

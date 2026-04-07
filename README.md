@@ -149,7 +149,7 @@ A window will open with the Zhumu interface.
    - The first time takes ~10-15 seconds to load the AI model
    - Two side-by-side panels show Chinese (left) and English (right) in real time
    - If you selected system audio, your Mac's sound output will automatically switch to Multi-Output Device
-   - There's a ~10-15 second delay between speech and text appearing — this is normal
+   - There's usually a ~6-10 second delay between speech and text appearing — this is normal for fully offline transcription + translation
 
 3. **Screenshot** (optional): Click the **Screenshot** button to capture a slide or screen with Chinese text
    - A crosshair will appear — drag to select the area
@@ -178,12 +178,12 @@ Each meeting gets its own folder (e.g., `2026-04-02_14-30-00/`). Inside:
 - Check **System Settings → Privacy & Security** for a blocked system extension, and click **Allow**
 
 **App crashes when clicking Start Listening**
-- Make sure you pulled the latest version: `git pull origin claude/setup-meeting-transcriber-4bRzA --rebase`
+- Run `./setup.sh` again to confirm all dependencies and models finished installing
 - Try using **Microphone** mode first to verify the app works
 
 **No text appearing**
 - Make sure someone is speaking Chinese — the app is tuned for Mandarin Chinese
-- If using system audio, check that Multi-Output Device is your sound output
+- If using system audio, check that **BlackHole 2ch** exists as an input and that your output is **Multi-Output Device**
 - If using microphone, make sure you're speaking close to the laptop mic
 
 **Text appears but it's nonsense or repetitive**
@@ -196,6 +196,12 @@ Each meeting gets its own folder (e.g., `2026-04-02_14-30-00/`). Inside:
 **Audio doesn't switch automatically**
 - Install SwitchAudioSource: `brew install switchaudio-osx`
 - Test it manually: `SwitchAudioSource -s "Multi-Output Device"`
+
+**macOS says Zhumu cannot access your microphone or screen**
+- Open **System Settings → Privacy & Security**
+- Allow **Microphone** access for Terminal or Zhumu
+- Allow **Screen Recording** if screenshot capture does not work
+- Restart Zhumu after changing permissions
 
 ---
 
@@ -238,10 +244,7 @@ zhumu/
 │   ├── ocr.py               # Tesseract OCR for Chinese text
 │   └── translate.py         # argos-translate for OCR text → English
 ├── ui/
-│   ├── main_window.py       # PyQt6 main window with side-by-side panels
-│   ├── menubar.py           # Legacy rumps menu bar app
-│   ├── transcript_window.py # Legacy floating window
-│   └── status.py            # Status indicators
+│   └── main_window.py       # PyQt6 main window with side-by-side panels
 ├── storage/
 │   ├── session.py           # Session lifecycle management
 │   └── markdown.py          # Transcript file writer
@@ -253,11 +256,11 @@ zhumu/
 - **Speech model**: [faster-whisper](https://github.com/SYSTRAN/faster-whisper) `small` model with `int8` quantization, optimized for Apple Silicon
 - **Dual-pass transcription**: Each audio chunk is processed twice — `task="transcribe"` for Chinese text, `task="translate"` for English
 - **Translation**: Whisper's built-in translation for audio; [argos-translate](https://github.com/argosopentech/argos-translate) for OCR text
-- **Audio**: 16 kHz mono via [sounddevice](https://python-sounddevice.readthedocs.io/), 5-second chunks
+- **Audio**: 16 kHz mono via [sounddevice](https://python-sounddevice.readthedocs.io/), 3-second chunks
 - **OCR**: [Tesseract](https://github.com/tesseract-ocr/tesseract) with Simplified/Traditional Chinese + English
-- **Latency**: ~10-15 seconds from speech to displayed text (two Whisper passes)
+- **Latency**: usually ~6-10 seconds from speech to displayed text (two Whisper passes)
 - **RAM**: ~1-2 GB while running
-- **Auto audio switching**: Uses [SwitchAudioSource](https://github.com/deweller/switchaudio-osx) with AppleScript fallback
+- **Auto audio switching**: Uses [SwitchAudioSource](https://github.com/deweller/switchaudio-osx) when available
 
 ### Requirements
 
@@ -266,6 +269,14 @@ zhumu/
 - BlackHole virtual audio driver (optional, for system audio capture)
 - SwitchAudioSource (optional, for automatic audio switching)
 - Tesseract OCR engine
+
+### Tests
+
+Run the lightweight smoke tests with:
+
+```bash
+python -m unittest discover tests
+```
 
 ## License
 

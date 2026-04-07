@@ -35,4 +35,6 @@ def write_transcript(
                 lines.append(f"[{ts}] {entry.text}")
         lines.append("")
 
-    path.write_text("\n".join(lines), encoding="utf-8")
+    temp_path = path.with_suffix(".tmp")
+    temp_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    temp_path.replace(path)

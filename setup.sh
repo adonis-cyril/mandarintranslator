@@ -7,6 +7,15 @@ set -e
 echo "=== Zhumu (驻目) Setup ==="
 echo ""
 
+ensure_brew_package() {
+    local package="$1"
+    if brew list "${package}" &> /dev/null; then
+        echo "${package} is already installed."
+    else
+        brew install "${package}"
+    fi
+}
+
 # Check for macOS
 if [[ "$(uname)" != "Darwin" ]]; then
     echo "Error: Zhumu requires macOS. Detected: $(uname)"
@@ -20,16 +29,16 @@ if ! command -v brew &> /dev/null; then
 fi
 
 echo "--- Installing BlackHole virtual audio driver ---"
-brew install blackhole-2ch || echo "BlackHole may already be installed."
+ensure_brew_package blackhole-2ch
 
 echo ""
 echo "--- Installing SwitchAudioSource (for auto audio switching) ---"
-brew install switchaudio-osx || echo "SwitchAudioSource may already be installed."
+ensure_brew_package switchaudio-osx
 
 echo ""
 echo "--- Installing Tesseract OCR with Chinese language packs ---"
-brew install tesseract
-brew install tesseract-lang  # Includes chi_sim and chi_tra
+ensure_brew_package tesseract
+ensure_brew_package tesseract-lang  # Includes chi_sim and chi_tra
 
 echo ""
 echo "--- Setting up Python virtual environment ---"
@@ -64,6 +73,9 @@ echo "=========================================="
 echo ""
 echo "  MANUAL STEP REQUIRED:"
 echo ""
+echo "  If you only plan to use microphone mode, you can skip"
+echo "  the BlackHole / Multi-Output setup below."
+echo ""
 echo "  You need to create a Multi-Output Device so that"
 echo "  Zhumu can capture system audio while you still"
 echo "  hear the call through your speakers/headphones."
@@ -78,4 +90,8 @@ echo ""
 echo "  To run Zhumu:"
 echo "    source .venv/bin/activate"
 echo "    python main.py"
+echo ""
+echo "  If screenshot capture or microphone input is blocked,"
+echo "  review System Settings -> Privacy & Security and allow"
+echo "  Zhumu / Terminal to access Screen Recording and Microphone."
 echo ""
