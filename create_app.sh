@@ -10,8 +10,14 @@ APP_DIR="/Applications/${APP_NAME}.app"
 CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
+ICON_PATH="${SCRIPT_DIR}/assets/icon/Zhumu.icns"
 
 echo "=== Creating ${APP_NAME}.app ==="
+
+if [[ ! -f "${ICON_PATH}" ]]; then
+    echo "Building Zhumu icon assets..."
+    "${SCRIPT_DIR}/.venv/bin/python" "${SCRIPT_DIR}/scripts/build_icon.py"
+fi
 
 # Create app bundle structure
 mkdir -p "${MACOS_DIR}"
@@ -25,6 +31,8 @@ cd "${SCRIPT_DIR}"
 exec "${SCRIPT_DIR}/.venv/bin/python" main.py
 LAUNCHER
 chmod +x "${MACOS_DIR}/${APP_NAME}"
+
+cp "${ICON_PATH}" "${RESOURCES_DIR}/Zhumu.icns"
 
 # Create Info.plist
 cat > "${CONTENTS_DIR}/Info.plist" << 'PLIST'
@@ -44,6 +52,8 @@ cat > "${CONTENTS_DIR}/Info.plist" << 'PLIST'
     <string>0.1.0</string>
     <key>CFBundleExecutable</key>
     <string>Zhumu</string>
+    <key>CFBundleIconFile</key>
+    <string>Zhumu.icns</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>NSHighResolutionCapable</key>
